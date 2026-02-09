@@ -8,6 +8,7 @@ psycopg2-binary==2.9.9
 # Validation & settings
 pydantic==2.5.0
 pydantic-settings==2.1.0
+email-validator==2.1.1
 python-dotenv==1.0.0
 
 # Auth & security
