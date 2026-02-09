@@ -15,7 +15,7 @@ app = FastAPI(title="Quiz System API", version="1.0.0")
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://m1v0sc5c-3000.inc1.devtunnels.ms"],
+    allow_origins=["http://localhost:3000", "https://m1v0sc5c-3000.inc1.devtunnels.ms", "https://quiz-frontend-q69i.onrender.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -32,3 +32,4 @@ app.include_router(certificate.router, prefix="/api/certificate", tags=["Certifi
 @app.get("/")
 def root():
     return {"message": "Quiz System API is running"}
+
