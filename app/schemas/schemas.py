@@ -103,6 +103,7 @@ class ExamSubmitRequest(BaseModel):
     topic_id: int
     answers: List[AnswerSubmission]
     tab_switch_count: int
+    face_violation_count: int = 0
 
 class ExamSubmitResponse(BaseModel):
     score: int
@@ -115,7 +116,14 @@ class ExamSubmitResponse(BaseModel):
 class UserScoreResponse(BaseModel):
     id: int
     score: int
+    total_marks: int
+    percentage: float
+    grade: str
     certificate_issued: bool
+    certificate_status: str
+    malpractice_detected: bool
+    tab_switch_count: int
+    face_violation_count: int
     created_at: datetime
     user_id: int
     topic_id: int
@@ -135,3 +143,14 @@ class DashboardStats(BaseModel):
 # Certificate
 class CertificateRequest(BaseModel):
     user_score_id: int
+
+class CertificateStatusUpdate(BaseModel):
+    status: str  # approved | rejected
+
+# Proctoring config
+class ProctoringConfig(BaseModel):
+    enabled: bool = True
+    check_interval_seconds: int = 30
+    max_violations: int = 5
+    allow_multiple_faces: bool = False
+    allow_no_face: bool = False

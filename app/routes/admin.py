@@ -9,11 +9,14 @@ from typing import List
 from app.core.database import get_db
 from app.auth.dependencies import require_role
 from app.core.security import hash_password
-from app.models.models import User, Role, Topic, UserScore
+from app.models.models import User, Role, Topic, UserScore, Question
 from app.schemas.schemas import (
-    DashboardStats, UserCreate, UserResponse, 
-    UserUpdate, UserScoreResponse
+    DashboardStats, UserCreate, UserResponse,
+    UserUpdate, UserScoreResponse, CertificateStatusUpdate, ProctoringConfig
 )
+from app.services.grade_calculator import calculate_grade, calculate_percentage
+from app.models.models import CERT_APPROVED, CERT_REJECTED, CERT_IN_REVIEW
+from app.services.proctor_config import load_config, save_config
 
 router = APIRouter()
 
@@ -152,29 +155,56 @@ def deactivate_user(
     db.commit()
     return {"message": "User deactivated successfully"}
 
+@router.get("/proctor-config", response_model=ProctoringConfig)
+def get_proctor_config(
+    current_user: User = Depends(require_role(["Admin"]))
+):
+    """Get current proctoring configuration."""
+    return load_config()
+
+
+@router.put("/proctor-config", response_model=ProctoringConfig)
+def update_proctor_config(
+    request: ProctoringConfig,
+    current_user: User = Depends(require_role(["Admin"]))
+):
+    """Update proctoring configuration."""
+    return save_config(request.model_dump())
+
+
+def _build_score_response(score, total_marks):
+    return UserScoreResponse(
+        id=score.id,
+        score=score.score,
+        total_marks=total_marks,
+        percentage=calculate_percentage(score.score, total_marks),
+        grade=calculate_grade(score.score, total_marks),
+        certificate_issued=score.certificate_issued,
+        certificate_status=score.certificate_status,
+        malpractice_detected=score.malpractice_detected or False,
+        tab_switch_count=score.tab_switch_count or 0,
+        face_violation_count=score.face_violation_count or 0,
+        created_at=score.created_at,
+        user_id=score.user_id,
+        topic_id=score.topic_id,
+        user_name=score.user.name,
+        topic_name=score.topic.name
+    )
+
+
 @router.get("/results", response_model=List[UserScoreResponse])
 def get_all_results(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(["Admin"]))
 ):
-    """
-    Get all exam results with user and topic details
-    """
+    """Get all exam results with user and topic details"""
     results = db.query(UserScore).filter(UserScore.is_active == True).all()
-    
     response = []
     for score in results:
-        response.append(UserScoreResponse(
-            id=score.id,
-            score=score.score,
-            certificate_issued=score.certificate_issued,
-            created_at=score.created_at,
-            user_id=score.user_id,
-            topic_id=score.topic_id,
-            user_name=score.user.name,
-            topic_name=score.topic.name
-        ))
-    
+        total_marks = db.query(Question).filter(
+            Question.topic_id == score.topic_id, Question.is_active == True
+        ).count()
+        response.append(_build_score_response(score, total_marks))
     return response
 
 @router.get("/results/user/{user_id}", response_model=List[UserScoreResponse])
@@ -183,25 +213,44 @@ def get_user_results(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(["Admin"]))
 ):
-    """
-    Get exam results for specific user
-    """
+    """Get exam results for specific user"""
     results = db.query(UserScore).filter(
-        UserScore.user_id == user_id,
-        UserScore.is_active == True
+        UserScore.user_id == user_id, UserScore.is_active == True
     ).all()
-    
     response = []
     for score in results:
-        response.append(UserScoreResponse(
-            id=score.id,
-            score=score.score,
-            certificate_issued=score.certificate_issued,
-            created_at=score.created_at,
-            user_id=score.user_id,
-            topic_id=score.topic_id,
-            user_name=score.user.name,
-            topic_name=score.topic.name
-        ))
-    
+        total_marks = db.query(Question).filter(
+            Question.topic_id == score.topic_id, Question.is_active == True
+        ).count()
+        response.append(_build_score_response(score, total_marks))
     return response
+
+@router.put("/results/{score_id}/status", response_model=UserScoreResponse)
+def update_certificate_status(
+    score_id: int,
+    request: CertificateStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["Admin"]))
+):
+    """Approve or reject a certificate (Admin only)"""
+    if request.status not in (CERT_APPROVED, CERT_REJECTED, CERT_IN_REVIEW):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Status must be 'approved', 'rejected', or 'in_review'"
+        )
+    score = db.query(UserScore).filter(
+        UserScore.id == score_id, UserScore.is_active == True
+    ).first()
+    if not score:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Result not found")
+
+    score.certificate_status = request.status
+    score.certificate_issued = (request.status == CERT_APPROVED)
+    score.updated_by = current_user.id
+    db.commit()
+    db.refresh(score)
+
+    total_marks = db.query(Question).filter(
+        Question.topic_id == score.topic_id, Question.is_active == True
+    ).count()
+    return _build_score_response(score, total_marks)

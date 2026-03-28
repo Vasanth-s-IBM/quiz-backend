@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # Exam settings
     EXAM_DURATION_MINUTES: int = 45
     MAX_TAB_SWITCHES: int = 3
+    MAX_FACE_VIOLATIONS: int = 5
     
     class Config:
         env_file = ".env"

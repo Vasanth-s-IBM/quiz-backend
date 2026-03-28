@@ -3,10 +3,37 @@ Database initialization script
 Creates roles and admin user
 """
 from sqlalchemy.orm import Session
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 from app.core.database import SessionLocal, engine
 from app.models.models import Base, Role, User, Topic, Question
 from app.core.security import hash_password
 import json
+
+
+def run_migrations():
+    """Idempotent schema migrations — safe to run multiple times."""
+    db = SessionLocal()
+    try:
+        migrations = [
+            "ALTER TABLE user_scores ADD COLUMN certificate_status TEXT NOT NULL DEFAULT 'in_review'",
+            "ALTER TABLE user_scores ADD COLUMN malpractice_detected BOOLEAN NOT NULL DEFAULT false",
+            "ALTER TABLE user_scores ADD COLUMN tab_switch_count INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE user_scores ADD COLUMN face_violation_count INTEGER NOT NULL DEFAULT 0",
+        ]
+        for sql in migrations:
+            try:
+                db.execute(text(sql))
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                if "duplicate column" in str(e).lower() or "already exists" in str(e).lower():
+                    pass  # idempotent — column already added
+                else:
+                    raise
+        print("✓ Migrations applied")
+    finally:
+        db.close()
 
 def init_database():
     """Initialize database with roles and admin user"""
@@ -157,4 +184,5 @@ def init_database():
         db.close()
 
 if __name__ == "__main__":
+    run_migrations()
     init_database()

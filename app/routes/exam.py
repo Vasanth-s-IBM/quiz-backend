@@ -9,7 +9,7 @@ import uuid
 import json
 from app.core.database import get_db
 from app.auth.dependencies import get_current_user, require_role
-from app.models.models import User, Topic, Question, UserScore
+from app.models.models import User, Topic, Question, UserScore, CERT_IN_REVIEW
 from app.schemas.schemas import (
     ExamStartRequest, ExamStartResponse, ExamSubmitRequest, 
     ExamSubmitResponse, QuestionResponse
@@ -33,18 +33,15 @@ def start_exam(
     - Fetches all active questions
     - Creates exam session
     """
-    # Check if user already took this exam
+    # Check if user already took this exam — soft-delete old record to allow retry
     existing_score = db.query(UserScore).filter(
         UserScore.user_id == current_user.id,
         UserScore.topic_id == request.topic_id,
         UserScore.is_active == True
     ).first()
-    
     if existing_score:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You have already completed this exam"
-        )
+        existing_score.is_active = False
+        db.commit()
     
     # Get topic
     topic = db.query(Topic).filter(
@@ -109,8 +106,11 @@ def submit_exam(
     - Calculates score
     - Saves to database
     """
-    # Check malpractice
-    malpractice_detected = request.tab_switch_count >= settings.MAX_TAB_SWITCHES
+    # Check malpractice — tab switches OR face violations
+    malpractice_detected = (
+        request.tab_switch_count >= settings.MAX_TAB_SWITCHES or
+        request.face_violation_count >= settings.MAX_FACE_VIOLATIONS
+    )
     
     # Get questions for this topic
     questions = db.query(Question).filter(
@@ -133,11 +133,15 @@ def submit_exam(
             if answer.selected_answer == correct_answers[answer.question_id]:
                 score += 1
     
-    # Save score to database
+    # Save score to database — status starts as in_review
     user_score = UserScore(
         user_id=current_user.id,
         topic_id=request.topic_id,
         score=score,
+        certificate_status=CERT_IN_REVIEW,
+        malpractice_detected=malpractice_detected,
+        tab_switch_count=request.tab_switch_count,
+        face_violation_count=request.face_violation_count,
         created_by=current_user.id
     )
     db.add(user_score)
@@ -146,9 +150,9 @@ def submit_exam(
     total_questions = len(questions)
     percentage = (score / total_questions * 100) if total_questions > 0 else 0
     
-    message = "Quiz completed. Certificate will be emailed shortly."
+    message = "Quiz completed! Your result is under review. You will get an update shortly."
     if malpractice_detected:
-        message = "Exam auto-submitted due to malpractice detection. Certificate will be emailed shortly."
+        message = "Exam auto-submitted due to malpractice detection. Your result is under review."
     
     return ExamSubmitResponse(
         score=score,

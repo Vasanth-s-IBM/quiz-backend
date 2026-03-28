@@ -4,7 +4,7 @@ Handles app initialization, middleware, and route registration
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import auth, topics, questions, exam, admin, certificate
+from app.routes import auth, topics, questions, exam, admin, certificate, user, proctoring
 from app.core.database import engine, Base
 
 # Create database tables
@@ -28,6 +28,8 @@ app.include_router(questions.router, prefix="/api/questions", tags=["Questions"]
 app.include_router(exam.router, prefix="/api/exam", tags=["Exam"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 app.include_router(certificate.router, prefix="/api/certificate", tags=["Certificate"])
+app.include_router(user.router, prefix="/api/user", tags=["User"])
+app.include_router(proctoring.router, prefix="/api/proctor", tags=["Proctoring"])
 
 @app.get("/")
 def root():

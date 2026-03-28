@@ -83,6 +83,11 @@ class Question(Base):
     
     topic = relationship("Topic", back_populates="questions")
 
+# Certificate status constants
+CERT_IN_REVIEW = "in_review"
+CERT_APPROVED  = "approved"
+CERT_REJECTED  = "rejected"
+
 class UserScore(Base):
     __tablename__ = "user_scores"
     
@@ -90,6 +95,10 @@ class UserScore(Base):
     uuid = Column(String(36), default=lambda: str(uuid.uuid4()), nullable=False)
     score = Column(Integer, nullable=False)
     certificate_issued = Column(Boolean, default=False)
+    certificate_status = Column(String(20), nullable=False, default=CERT_IN_REVIEW)
+    malpractice_detected = Column(Boolean, default=False)
+    tab_switch_count = Column(Integer, default=0)
+    face_violation_count = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     created_by = Column(Integer)
