@@ -2,16 +2,16 @@
 User profile routes — own results and certificate download
 """
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List
+import io
 from app.core.database import get_db
 from app.auth.dependencies import require_role
 from app.models.models import User, UserScore, Question, CERT_APPROVED
 from app.schemas.schemas import UserScoreResponse
 from app.services.grade_calculator import calculate_grade, calculate_percentage
 from app.services.certificate_service import generate_certificate_pdf
-import os
 
 router = APIRouter()
 
@@ -25,6 +25,9 @@ def _build_score_response(score, total_marks):
         grade=calculate_grade(score.score, total_marks),
         certificate_issued=score.certificate_issued,
         certificate_status=score.certificate_status,
+        malpractice_detected=score.malpractice_detected,
+        tab_switch_count=score.tab_switch_count,
+        face_violation_count=score.face_violation_count,
         created_at=score.created_at,
         user_id=score.user_id,
         topic_id=score.topic_id,
@@ -83,7 +86,7 @@ def download_certificate(
 
     grade = calculate_grade(score.score, total_marks)
 
-    pdf_path = generate_certificate_pdf(
+    pdf_bytes = generate_certificate_pdf(
         user_name=score.user.name,
         topic_name=score.topic.name,
         score=score.score,
@@ -91,8 +94,9 @@ def download_certificate(
         grade=grade
     )
 
-    return FileResponse(
-        path=pdf_path,
+    filename = f"certificate_{score.topic.name.replace(' ', '_')}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
         media_type="application/pdf",
-        filename=f"certificate_{score.topic.name.replace(' ', '_')}.pdf"
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )

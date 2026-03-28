@@ -1,7 +1,7 @@
 {
-  "enabled": false,
+  "enabled": true,
   "check_interval_seconds": 30,
-  "max_violations": 5,
+  "max_violations": 4,
   "allow_multiple_faces": false,
   "allow_no_face": false
 }
